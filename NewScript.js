@@ -96,13 +96,13 @@ fetch('ocean.geojson')
       dateRangeData[formattedDate] = await fetchWindDataForDate(formattedDate);
       currentDate.setDate(currentDate.getDate() + 1);
     }
-    console.log(dateRangeData)
+    // console.log(dateRangeData)
     return dateRangeData;
     
   }
 
   function updateSliderAndDate(date) {
-    console.log(date);
+    // console.log(date);
     const startDateObj = new Date(today);
     const selectedDateObj = new Date(date);
     const daysDiff = (selectedDateObj - startDateObj) / (1000 * 60 * 60 * 24);
