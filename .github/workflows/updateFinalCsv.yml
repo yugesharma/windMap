@@ -21,8 +21,13 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Debug file paths
+        run: |
+          ls -R
+
+
       - name: Run the update script
-        run: python downloaddata.py
+        run: python downloadData.py
 
       - name: Commit and push changes
         run: |
