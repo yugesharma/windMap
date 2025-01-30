@@ -7,7 +7,7 @@ import numpy as np
 
 
 
-myTimeZone=pytz.timezone('Asia/Kolkata')
+myTimeZone=pytz.timezone('America/New_York')
 today=datetime.datetime.now(myTimeZone)
 today=today.date()
 endDate=today+datetime.timedelta(days=8)
