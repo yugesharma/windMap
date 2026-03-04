@@ -17,6 +17,7 @@ var month = (endDateformat.getMonth() + 1).toString().padStart(2, '0');
 var day = endDateformat.getDate().toString().padStart(2, '0');
 var endDate = year + '-' + month + '-' + day;
 var dateRangeData = {};
+var availableDates = []; // Store dates found in CSV
 
 
 const oapiKey = '5431cea4928259758e577c8cd26f641d';
@@ -60,8 +61,15 @@ fetch('ocean.geojson')
     const data = await fetch('final.csv').then((response) => response.text());
     const rows = data.split('\n');
     const markers = [];
+    
+    // Adjust sampling rate based on zoom level
+    const zoom = map.getZoom();
+    let step;
+    if (zoom <= 4) step = 4;
+    else if (zoom <= 5) step = 3;
+    else step = 2;
   
-    for (let i = 1; i < rows.length - 1; i+=2) {
+    for (let i = 1; i < rows.length - 1; i += step) {
       const row = rows[i].split(',');
       const time = row[0];
       if (time.includes(date)) {
@@ -85,31 +93,52 @@ fetch('ocean.geojson')
   }
   
   async function preloadData() {
-    const startDate = today;
-    const endDate = new Date(endDateformat);
+    const data = await fetch('final.csv').then((response) => response.text());
+    const rows = data.split('\n');
+    
+    // Extract unique dates from CSV
+    const datesSet = new Set();
+    for (let i = 1; i < rows.length - 1; i++) {
+      const row = rows[i].split(',');
+      const time = row[0];
+      if (time) {
+        const dateOnly = time.split(' ')[0];
+        datesSet.add(dateOnly);
+      }
+    }
+    availableDates = Array.from(datesSet).sort();
+    
+    // If no dates match today, use the first available date
+    if (availableDates.length > 0) {
+      if (!availableDates.includes(today)) {
+        today = availableDates[0];
+        console.log('Using first available date in CSV:', today);
+      }
+      
+      // Update endDate based on available data
+      if (availableDates.length > 0) {
+        endDate = availableDates[availableDates.length - 1];
+      }
+    }
   
     const dateRangeData = {};
-    const currentDate = new Date(startDate);
   
-    while (currentDate <= endDate) {
-      const formattedDate = currentDate.toISOString().split('T')[0];
-      dateRangeData[formattedDate] = await fetchWindDataForDate(formattedDate);
-      currentDate.setDate(currentDate.getDate() + 1);
+    // Load data for all available dates
+    for (const date of availableDates) {
+      dateRangeData[date] = await fetchWindDataForDate(date);
     }
-    // console.log(dateRangeData)
+    
     return dateRangeData;
     
   }
 
   function updateSliderAndDate(date) {
-    // console.log(date);
-    const startDateObj = new Date(today);
-    const selectedDateObj = new Date(date);
-    const daysDiff = (selectedDateObj - startDateObj) / (1000 * 60 * 60 * 24);
-  
-    // Update the date slider and selected date display
-    dateSlider.value = daysDiff;
-    selectedDate.textContent = date;
+    // Find the index of the date in available dates
+    const dateIndex = availableDates.indexOf(date);
+    if (dateIndex !== -1) {
+      dateSlider.value = dateIndex;
+      selectedDate.textContent = date;
+    }
   }
 
 
@@ -117,14 +146,11 @@ fetch('ocean.geojson')
 function updateWind(selectedDate) {
   const loadingIndicator = document.getElementById('loadingIndicator');
   loadingIndicator.style.display = 'block';
-  if (dateRangeData[selectedDate]) {
-    displayMarkers(dateRangeData[selectedDate]);
-  } else {
-    fetchWindDataForDate(selectedDate).then((markers) => {
-      dateRangeData[selectedDate] = markers;
-      displayMarkers(markers);
-    });
-  }
+  // Clear cache on zoom level change to refetch with new sampling rate
+  fetchWindDataForDate(selectedDate).then((markers) => {
+    dateRangeData[selectedDate] = markers;
+    displayMarkers(markers);
+  });
 }
 
 //animate wind data display
@@ -150,8 +176,53 @@ function displayMarkers(markers) {
 }
 
 // Initial data preload
-const defaultData= preloadData();
-updateWind(today);
+preloadData().then(data => {
+  dateRangeData = data;
+  updateWind(today);
+  
+  // Initialize slider after data is loaded
+  const dateSlider = document.getElementById("dateslider");
+  const play = document.getElementById("play"); 
+  const selectedDate = document.getElementById("selectedDate");
+  document.getElementById("selectedDate").defaultValue = today;
+  dateSlider.value = 0; 
+  dateSlider.max = availableDates.length - 1; // Set max based on available dates
+  selectedDate.textContent = today;
+
+  dateSlider.addEventListener("input", function () {
+    // Handle slider value changes using available dates
+    const sliderIndex = parseInt(dateSlider.value);
+    if (sliderIndex < availableDates.length) {
+      const formattedDate = availableDates[sliderIndex];
+      selectedDate.textContent = formattedDate;
+      updateWind(formattedDate);
+    }
+  });
+  
+  // Add zoom event listener to refresh markers with appropriate density
+  let zoomTimeout;
+  map.on('zoomend', function() {
+    clearTimeout(zoomTimeout);
+    zoomTimeout = setTimeout(function() {
+      const sliderIndex = parseInt(dateSlider.value);
+      if (sliderIndex < availableDates.length) {
+        const formattedDate = availableDates[sliderIndex];
+        updateWind(formattedDate);
+      }
+    }, 300); // Debounce to avoid too many refreshes during zoom
+  });
+
+  play.onclick = function(){
+    const loader = document.getElementById('loader');
+    loader.style.display = 'block';
+    for (let i = 0; i < availableDates.length; i++) {
+      animate(availableDates[i], i * 800);
+    }
+    setTimeout(function() {
+      loader.style.display = 'none';
+    }, (availableDates.length - 1) * 800);
+  };
+});
 
 //event handler for showing real time wind data for co-ordinates selected on the map
 map.on('click', function (e) {
@@ -208,45 +279,3 @@ fetch('countries.geojson')
   .catch(error => {
     console.error('Error loading GeoJSON data:', error);
   });
-
-//Slider
-
-const dateSlider = document.getElementById("dateslider");
-const play= document.getElementById("play"); 
-        const selectedDate = document.getElementById("selectedDate");
-        document.getElementById("selectedDate").defaultValue = today;
-        dateSlider.value = 0; 
-        selectedDate.textContent = today;
-
-        dateSlider.addEventListener("input", function () {
-            // Handle slider value changes
-            const selectedDay = new Date(today);
-            selectedDay.setDate(selectedDay.getDate() + parseInt(dateSlider.value));
-            const formattedDate = `${selectedDay.getFullYear()}-${(selectedDay.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.getDate().toString().padStart(2, '0')}`;
-            selectedDate.textContent = formattedDate;
-            updateWind(formattedDate)});
-
-
-        play.onclick = function(){
-            const loader = document.getElementById('loader');
-            loader.style.display = 'block';
-            for (let i = 0; i < 7; i++) {
-              var endDateformat = new Date(new Date().setDate(new Date().getDate() + i));
-    
-              // Format the year, month, and day with double digits
-              var year = endDateformat.getFullYear();
-              var month = (endDateformat.getMonth() + 1).toString().padStart(2, '0');
-              var day = endDateformat.getDate().toString().padStart(2, '0');
-              
-              var endDate = year + '-' + month + '-' + day;
-              animate(endDate, i * 800);
-            }
-            setTimeout(function() {
-              loader.style.display = 'none';
-          }, 6 * 800); // Assuming the animation duration is 500ms and you have 7 iterations
-      };
-            
-
-            
-
-        

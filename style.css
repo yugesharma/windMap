@@ -38,6 +38,8 @@ body {
 #map {
   margin-top: 2px;
   height: 100%;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 #title {
@@ -52,11 +54,46 @@ body {
 
 .wind-arrow-icon {
   text-align: center;
+  pointer-events: none;
+  will-change: transform;
 }
 
 .wind-arrow-icon i {
   margin: 10px;
   opacity: 0.8;
+  will-change: transform;
+}
+
+.legend {
+  position: absolute;
+  bottom: 30px;
+  right: 10px;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 10px 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  font-family: "Roboto", sans-serif;
+}
+
+.legend h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: bold;
+  color: #2d2a32;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 5px 0;
+  font-size: 13px;
+  color: #2d2a32;
+}
+
+.legend-item i {
+  font-size: 16px;
 }
 
 .line {

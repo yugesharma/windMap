@@ -12,16 +12,36 @@ today=datetime.datetime.now(myTimeZone)
 today=today.date()
 endDate=today+datetime.timedelta(days=8)
 endDate=endDate
-url=f'https://pae-paha.pacioos.hawaii.edu/thredds/ncss/ncep_global/NCEP_Global_Atmospheric_Model_best.ncd?var=ugrd10m&var=vgrd10m&north=50&west=278&east=345&south=12&disableLLSubset=on&disableProjSubset=on&horizStride=1&time_start={today}T12%3A00%3A00Z&time_end={endDate}T12%3A00%3A00Z&timeStride=1&addLatLon=true'
+url=f'https://pae-paha.pacioos.hawaii.edu/thredds/ncss/ncep_global/NCEP_Global_Atmospheric_Model_best.ncd?var=ugrd10m&var=vgrd10m&north=50&west=278&east=345&south=12&horizStride=1&time_start={today}T12%3A00%3A00Z&time_end={endDate}T12%3A00%3A00Z&timeStride=1&addLatLon=true'
 print(url)
-response=requests.get(url)
+response=requests.get(url, timeout=30)
 if response.status_code==200:
     file_path='forecast1.nc'
-    print("Sucessfully fetched")
+    print("Successfully fetched")
     with open(file_path, 'wb') as file:
         file.write(response.content)
+elif response.status_code==400 and 'does not intersect actual time range' in response.text:
+    # Try fetching yesterday's data instead
+    yesterday = today - datetime.timedelta(days=1)
+    endDateYesterday = yesterday + datetime.timedelta(days=8)
+    print(f"Data not available for {today}, trying {yesterday} instead...")
+    url_retry=f'https://pae-paha.pacioos.hawaii.edu/thredds/ncss/ncep_global/NCEP_Global_Atmospheric_Model_best.ncd?var=ugrd10m&var=vgrd10m&north=50&west=278&east=345&south=12&horizStride=1&time_start={yesterday}T12%3A00%3A00Z&time_end={endDateYesterday}T12%3A00%3A00Z&timeStride=1&addLatLon=true'
+    response=requests.get(url_retry, timeout=30)
+    if response.status_code==200:
+        file_path='forecast1.nc'
+        print(f"Successfully fetched data for {yesterday}")
+        with open(file_path, 'wb') as file:
+            file.write(response.content)
+    else:
+        print(f'Error: HTTP status code {response.status_code}')
+        print(f'Response: {response.text[:200]}')
+        import sys
+        sys.exit(1)
 else:
-    print('err')
+    print(f'Error: HTTP status code {response.status_code}')
+    print(f'Response: {response.text[:200]}')
+    import sys
+    sys.exit(1)
 
 
 ds=xr.open_dataset('forecast1.nc')
