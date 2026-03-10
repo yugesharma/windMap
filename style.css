@@ -38,8 +38,14 @@ body {
 #map {
   margin-top: 2px;
   height: 100%;
-  transform: translateZ(0);
-  backface-visibility: hidden;
+  background-color: #94b6ef;
+}
+
+#map:focus,
+#map:focus-visible,
+.leaflet-container:focus,
+.leaflet-container:focus-visible {
+  outline: none;
 }
 
 #title {
@@ -242,6 +248,27 @@ tr {
   width: 100%;
   height: 100%;
   cursor: pointer;
+}
+
+#resetRoute {
+  margin: 0 0 10px 0;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: #496a81;
+  color: #ffffff;
+  font-family: "Roboto", sans-serif;
+  cursor: pointer;
+}
+
+#resetRoute:hover {
+  opacity: 0.9;
+}
+
+.route-actions {
+  width: 430px;
+  margin: 0 auto;
 }
 
 .loader-container {

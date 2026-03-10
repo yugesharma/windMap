@@ -1,13 +1,20 @@
-const map = L.map('map').setView([34, -72], 6);
+const map = L.map('map', { preferCanvas: true }).setView([34, -72], 6);
 map.createPane('label');
 map.getPane('label').style.zIndex = 1000;
-var tables="";
+var tables = "";
 const drawnItems = new L.FeatureGroup();
+
+
+map.createPane('windArrows');
+map.getPane('windArrows').style.zIndex = 450;
+map.getPane('windArrows').style.pointerEvents = 'none';
+
+let currentDisplayData = []; 
 let polyline;
 
 var today = new Date();
 var dd = String(today.getDate()).padStart(2, '0');
-var mm = String(today.getMonth() + 1).padStart(2, '0'); 
+var mm = String(today.getMonth() + 1).padStart(2, '0');
 var yyyy = today.getFullYear();
 today = yyyy + '-' + mm + '-' + dd;
 
@@ -17,265 +24,290 @@ var month = (endDateformat.getMonth() + 1).toString().padStart(2, '0');
 var day = endDateformat.getDate().toString().padStart(2, '0');
 var endDate = year + '-' + month + '-' + day;
 var dateRangeData = {};
-var availableDates = []; // Store dates found in CSV
-
+var availableDates = [];
+var forecastFeatures = [];
+var dateFeatureMap = {};
+let bgWarmGeneration = 0;
+const loadingIndicator = document.getElementById('loadingIndicator');
+const dateSlider = document.getElementById("dateslider");
+const play = document.getElementById("play");
+const resetRouteBtn = document.getElementById("resetRoute");
+const selectedDateLabel = document.getElementById("selectedDate");
 
 const oapiKey = '5431cea4928259758e577c8cd26f641d';
 
-// Function to convert coordinates to DMS
-function toDMS(lat,lng) {
-    const toDMS=coord=>{min=~~(minA=((a=Math.abs(coord))-(deg=~~a))*60);
-    return deg+"° "+min+"' "+Math.ceil((minA-min)*60)+'"';
-    };
-    var cord= ` ${toDMS(lat)} ${lat>=0?"N":"S"} / ${toDMS(lng)} ${lng>=0?"E":"W"}`;
-    return cord;
-    }
+function toDMS(lat, lng) {
+  const toDMS = coord => {
+    min = ~~(minA = ((a = Math.abs(coord)) - (deg = ~~a)) * 60);
+    return deg + "° " + min + "' " + Math.ceil((minA - min) * 60) + '"';
+  };
+  return ` ${toDMS(lat)} ${lat >= 0 ? "N" : "S"} / ${toDMS(lng)} ${lng >= 0 ? "E" : "W"}`;
+}
 
-//real time wind data for co-ordinates
 function fetchWindData(lat, lon) {
   const apiUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${oapiKey}`;
   return fetch(apiUrl)
     .then(response => response.json())
-    .catch(error => {
-      console.error('Error fetching wind data:', error);
-    });
+    .catch(error => console.error('Error fetching wind data:', error));
 }
 
 fetch('ocean.geojson')
   .then(response => response.json())
   .then(data => {
     const geoJsonLayer = L.geoJSON(data).addTo(map);
-    geoJsonLayer.setStyle({
-      color: '#94b6ef',
-      weight: 1,
-      fillOpacity: 1,
-    });
+    geoJsonLayer.setStyle({ color: '#94b6ef', weight: 1, fillOpacity: 1 });
   })
-  .catch(error => {
-    console.error('Error loading GeoJSON data:', error);
-  });
+  .catch(error => console.error('Error loading ocean GeoJSON:', error));
 
-  
+async function buildFeatureData(date) {
+  const featuresForDate = dateFeatureMap[date] || [];
+  const zoom = map.getZoom();
+  let sampleMod;
+  if (zoom <= 3) sampleMod = 20;
+  else if (zoom <= 4) sampleMod = 10;
+  else if (zoom <= 5) sampleMod = 4;
+  else if (zoom <= 6) sampleMod = 2;
+  else sampleMod = 1;
 
-  async function fetchWindDataForDate(date) {
-    const data = await fetch('final.csv').then((response) => response.text());
-    const rows = data.split('\n');
-    const markers = [];
-    
-    // Adjust sampling rate based on zoom level
-    const zoom = map.getZoom();
-    let step;
-    if (zoom <= 4) step = 4;
-    else if (zoom <= 5) step = 3;
-    else step = 2;
-  
-    for (let i = 1; i < rows.length - 1; i += step) {
-      const row = rows[i].split(',');
-      const time = row[0];
-      if (time.includes(date)) {
-        const latitude = parseFloat(row[1]);
-        const longitude = parseFloat(row[2]);
-        const windSpeed = parseFloat(row[6]);
-        const windDirection = parseFloat(row[7]);
-  
-        const arrowIcon = L.divIcon({
-          className: 'wind-arrow-icon',
-          iconSize: [10, 10],
-          html: '<div style="transform: rotate(' + windDirection + 'deg)"><i class="fas fa-arrow-up" style="color: ' + getColor(windSpeed) + ';"></i></div>'
-        });
-  
-        const marker = L.marker([latitude, longitude], { icon: arrowIcon, markerType: 'wind' });
-        markers.push(marker);
-      }
+  const useBoundsCulling = zoom > 6;
+  const bounds = useBoundsCulling ? map.getBounds() : null;
+
+  const data = [];
+  for (let i = 0; i < featuresForDate.length; i++) {
+    const feature = featuresForDate[i];
+    const coords = feature?.geometry?.coordinates;
+    if (!coords || coords.length < 2) continue;
+
+    const lat = parseFloat(coords[1]);
+    const lon = parseFloat(coords[0]);
+    const props = feature.properties || {};
+    const speed = parseFloat(props.WS);
+    const dir = parseFloat(props.WD);
+
+    if (isNaN(lat) || isNaN(lon) || isNaN(speed) || isNaN(dir)) continue;
+
+    if (sampleMod > 1) {
+      const latKey = Math.round((lat + 90) * 100);
+      const lonKey = Math.round((lon + 180) * 100);
+      const hash = Math.abs((latKey * 73856093) ^ (lonKey * 19349663));
+      if (hash % sampleMod !== 0) continue;
     }
-  
-    return markers;
+
+    if (useBoundsCulling && !bounds.contains([lat, lon])) continue;
+
+    data.push({ lat, lon, dir, speed });
   }
-  
-  async function preloadData() {
-    const data = await fetch('final.csv').then((response) => response.text());
-    const rows = data.split('\n');
-    
-    // Extract unique dates from CSV
-    const datesSet = new Set();
-    for (let i = 1; i < rows.length - 1; i++) {
-      const row = rows[i].split(',');
-      const time = row[0];
-      if (time) {
-        const dateOnly = time.split(' ')[0];
-        datesSet.add(dateOnly);
-      }
-    }
-    availableDates = Array.from(datesSet).sort();
-    
-    // If no dates match today, use the first available date
-    if (availableDates.length > 0) {
-      if (!availableDates.includes(today)) {
-        today = availableDates[0];
-        console.log('Using first available date in CSV:', today);
-      }
-      
-      // Update endDate based on available data
-      if (availableDates.length > 0) {
-        endDate = availableDates[availableDates.length - 1];
-      }
-    }
-  
-    const dateRangeData = {};
-  
-    // Load data for all available dates
-    for (const date of availableDates) {
-      dateRangeData[date] = await fetchWindDataForDate(date);
-    }
-    
-    return dateRangeData;
-    
-  }
+  return data;
+}
 
-  function updateSliderAndDate(date) {
-    // Find the index of the date in available dates
-    const dateIndex = availableDates.indexOf(date);
-    if (dateIndex !== -1) {
-      dateSlider.value = dateIndex;
-      selectedDate.textContent = date;
+function renderWindArrows(data) {
+  const pane = map.getPane('windArrows');
+  if (!data || data.length === 0) { pane.innerHTML = ''; return; }
+  const parts = new Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    const { lat, lon, dir, speed } = data[i];
+    const pt = map.latLngToLayerPoint([lat, lon]);
+    parts[i] = `<div style="position:absolute;left:${pt.x}px;top:${pt.y}px;transform:translate(-50%,-50%) rotate(${dir}deg);font-size:10px;color:${getColor(speed)};opacity:0.8"><i class="fas fa-arrow-up"></i></div>`;
+  }
+  pane.innerHTML = parts.join('');
+}
+
+async function preloadData() {
+  const geojson = await fetch('forecast.geojson').then(r => r.json());
+  forecastFeatures = Array.isArray(geojson.features) ? geojson.features : [];
+  dateFeatureMap = {};
+
+  const datesSet = new Set();
+  for (let i = 0; i < forecastFeatures.length; i++) {
+    const props = forecastFeatures[i]?.properties || {};
+    const dateOnly = props.date || (props.time ? String(props.time).split(' ')[0] : null);
+    if (dateOnly) {
+      datesSet.add(dateOnly);
+      if (!dateFeatureMap[dateOnly]) dateFeatureMap[dateOnly] = [];
+      dateFeatureMap[dateOnly].push(forecastFeatures[i]);
     }
   }
+  availableDates = Array.from(datesSet).sort();
 
+  if (availableDates.length > 0) {
+    if (!availableDates.includes(today)) {
+      today = availableDates[0];
+      console.log('Using first available date in GeoJSON:', today);
+    }
+    endDate = availableDates[availableDates.length - 1];
+  }
 
-// Function for showing wind markers updated by date slider or play button
+  const result = {};
+  result[today] = await buildFeatureData(today);
+  return result;
+}
+
+function updateSliderAndDate(date) {
+  const dateIndex = availableDates.indexOf(date);
+  if (dateIndex !== -1) {
+    dateSlider.value = dateIndex;
+    selectedDateLabel.textContent = date;
+  }
+}
+
 function updateWind(selectedDate) {
-  const loadingIndicator = document.getElementById('loadingIndicator');
+  selectedDateLabel.textContent = selectedDate;
+
+  if (dateRangeData[selectedDate] && dateRangeData[selectedDate].length > 0) {
+    displayMarkers(dateRangeData[selectedDate]);
+    return;
+  }
+
   loadingIndicator.style.display = 'block';
-  // Clear cache on zoom level change to refetch with new sampling rate
-  fetchWindDataForDate(selectedDate).then((markers) => {
-    dateRangeData[selectedDate] = markers;
-    displayMarkers(markers);
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      buildFeatureData(selectedDate).then(function (data) {
+        dateRangeData[selectedDate] = data;
+        displayMarkers(data);
+      });
+    });
   });
 }
 
-//animate wind data display
 function animate(date, delay) {
-  setTimeout(function(){
+  setTimeout(function () {
     updateSliderAndDate(date);
     updateWind(date);
   }, delay);
 }
 
-// Display markers on the map
-function displayMarkers(markers) {
-  // Clear existing markers from the map
-  map.eachLayer(function (layer) {
-    if (layer instanceof L.Marker && layer.options.markerType=='wind') {
-      map.removeLayer(layer);
-    }
-  });
+function displayMarkers(data) {
+  currentDisplayData = data;
   loadingIndicator.style.display = 'none';
-
-  // Add the new markers to the map
-  markers.forEach((marker) => marker.addTo(map));
+  renderWindArrows(data);
 }
 
-// Initial data preload
+selectedDateLabel.textContent = 'Loading…';
+
 preloadData().then(data => {
   dateRangeData = data;
-  updateWind(today);
-  
-  // Initialize slider after data is loaded
-  const dateSlider = document.getElementById("dateslider");
-  const play = document.getElementById("play"); 
-  const selectedDate = document.getElementById("selectedDate");
-  document.getElementById("selectedDate").defaultValue = today;
-  dateSlider.value = 0; 
-  dateSlider.max = availableDates.length - 1; // Set max based on available dates
-  selectedDate.textContent = today;
+  dateSlider.value = 0;
+  dateSlider.max = availableDates.length - 1;
 
+  updateWind(today);
+
+
+  async function backgroundWarmDates(dates, generation) {
+    for (const d of dates) {
+      if (bgWarmGeneration !== generation) return;
+      if (!dateRangeData[d]) {
+        dateRangeData[d] = await buildFeatureData(d);
+      }
+      await new Promise(r => setTimeout(r, 30));
+    }
+  }
+
+  const otherDates = availableDates.filter(d => d !== today);
+  bgWarmGeneration++;
+  backgroundWarmDates(otherDates, bgWarmGeneration);
+
+  let sliderDebounce;
   dateSlider.addEventListener("input", function () {
-    // Handle slider value changes using available dates
     const sliderIndex = parseInt(dateSlider.value);
     if (sliderIndex < availableDates.length) {
       const formattedDate = availableDates[sliderIndex];
-      selectedDate.textContent = formattedDate;
-      updateWind(formattedDate);
+      selectedDateLabel.textContent = formattedDate;
+      clearTimeout(sliderDebounce);
+      sliderDebounce = setTimeout(function () {
+        updateWind(formattedDate);
+      }, 150);
     }
   });
-  
-  // Add zoom event listener to refresh markers with appropriate density
-  let zoomTimeout;
-  map.on('zoomend', function() {
-    clearTimeout(zoomTimeout);
-    zoomTimeout = setTimeout(function() {
-      const sliderIndex = parseInt(dateSlider.value);
-      if (sliderIndex < availableDates.length) {
-        const formattedDate = availableDates[sliderIndex];
-        updateWind(formattedDate);
-      }
-    }, 300); // Debounce to avoid too many refreshes during zoom
+
+  function invalidateAndRefresh() {
+    const sliderIndex = parseInt(dateSlider.value);
+    if (sliderIndex >= availableDates.length) return;
+    const formattedDate = availableDates[sliderIndex];
+    bgWarmGeneration++; 
+    delete dateRangeData[formattedDate];
+    updateWind(formattedDate);
+  }
+
+  let viewChangeTimeout;
+
+  map.on('zoomend', function () {
+    console.log('Current zoom level:', map.getZoom());
+    clearTimeout(viewChangeTimeout);
+    viewChangeTimeout = setTimeout(invalidateAndRefresh, 300);
   });
 
-  play.onclick = function(){
+  map.on('moveend', function () {
+    if (currentDisplayData.length > 0) {
+      renderWindArrows(currentDisplayData);
+    }
+    if (map.getZoom() > 6) {
+      clearTimeout(viewChangeTimeout);
+      viewChangeTimeout = setTimeout(invalidateAndRefresh, 400);
+    }
+  });
+
+  play.onclick = function () {
     const loader = document.getElementById('loader');
     loader.style.display = 'block';
     for (let i = 0; i < availableDates.length; i++) {
       animate(availableDates[i], i * 800);
     }
-    setTimeout(function() {
+    setTimeout(function () {
       loader.style.display = 'none';
     }, (availableDates.length - 1) * 800);
   };
 });
 
-//event handler for showing real time wind data for co-ordinates selected on the map
 map.on('click', function (e) {
   const lat = e.latlng.lat;
   const lng = e.latlng.lng;
 
   fetchWindData(lat, lng).then(data => {
-    const windSpeed = Math.round(1.944*data.wind.speed*100)/100;
+    const windSpeed = Math.round(1.944 * data.wind.speed * 100) / 100;
     const windDirection = data.wind.deg;
-    tables+="<tr>"+
-    "<td class='position' >"+ toDMS(lat, lng) +"</td>"+
-    "<td class='windSpeed'>"+ windSpeed +"</td>"+
-    "<td class='windDirection'>"+ windDirection+"°"+"</td>"
-    +"</tr>"
-    document.getElementById("selected").innerHTML=tables;
-   });
+    tables += "<tr>" +
+      "<td class='position'>" + toDMS(lat, lng) + "</td>" +
+      "<td class='windSpeed'>" + windSpeed + "</td>" +
+      "<td class='windDirection'>" + windDirection + "°" + "</td>" +
+      "</tr>";
+    document.getElementById("selected").innerHTML = tables;
+  });
 
-  L.marker([lat, lng], {pane: 'label'}).addTo(drawnItems);
+  L.marker([lat, lng], { pane: 'label' }).addTo(drawnItems);
 
-  if (polyline) {
-    map.removeLayer(polyline);
-  }
+  if (polyline) map.removeLayer(polyline);
 
   polyline = L.polyline([], { className: 'line', color: 'white', weight: 3, pane: 'label' }).addTo(map);
   polyline.bringToFront();
-
-  const coordinates = drawnItems.getLayers().map(layer => layer.getLatLng());
-  polyline.setLatLngs(coordinates);
+  polyline.setLatLngs(drawnItems.getLayers().map(layer => layer.getLatLng()));
 });
 
 function getColor(speed) {
-  if (speed < 5) {
-    return 'green';
-  } else if (speed < 10) {
-    return '#ffcc00';
-  } else {
-    return 'red';
-  }
+  if (speed < 5) return 'green';
+  if (speed < 10) return '#ffcc00';
+  return 'red';
 }
+
+if (resetRouteBtn) {
+  resetRouteBtn.addEventListener('click', function () {
+    drawnItems.clearLayers();
+    if (polyline) {
+      map.removeLayer(polyline);
+      polyline = null;
+    }
+    tables = "";
+    const selectedTable = document.getElementById("selected");
+    if (selectedTable) selectedTable.innerHTML = "";
+  });
+}
+
 map.addLayer(drawnItems);
 drawnItems.bringToFront();
 
-//layer for land features to hide data from appearing on the land
 fetch('countries.geojson')
   .then(response => response.json())
   .then(data => {
     const geoJsonLayer = L.geoJSON(data, { pane: 'label' }).addTo(map);
-    geoJsonLayer.setStyle({
-      color: '#dea450',
-      weight: 1,
-      fillOpacity: 1,
-    });
+    geoJsonLayer.setStyle({ color: '#dea450', weight: 1, fillOpacity: 1 });
   })
-  .catch(error => {
-    console.error('Error loading GeoJSON data:', error);
-  });
+  .catch(error => console.error('Error loading countries GeoJSON:', error));
