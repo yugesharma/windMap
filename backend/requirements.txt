@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+geoalchemy2
+xarray
+netCDF4
+pandas
+python-dotenv
+requests
+numpy
+pytz
+scipy
