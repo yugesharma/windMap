@@ -8,3 +8,25 @@
   height: 100%; 
   border: 2px solid red;
 }
+
+.map-shell {
+  --button-size: 40px;
+  --widget-margin: 12px;
+}
+
+.map-shell .deck-widget {
+  z-index: 20;
+}
+
+.map-shell .deck-widget-button,
+.map-shell .deck-widget-button-group {
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid #d0d5dd;
+}
+
+.map-shell .deck-widget-button button,
+.map-shell .deck-widget-button-group button {
+  min-width: 38px;
+  min-height: 38px;
+  pointer-events: auto;
+}

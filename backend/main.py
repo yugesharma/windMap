@@ -30,19 +30,25 @@ def get_wind_by_bbox(
     lat_max: float,
     lon_min: float,
     lon_max: float,
+    grid_size: float = 1.0,
     db: Session=Depends(get_db)
 ):
 
-    query=text("""SELECT id, ST_Y(location::geometry) as lat,
+    query=text("""SELECT  DISTINCT ON (ST_SnapToGrid(location::geometry, :grid, :grid))
+               id, ST_Y(location::geometry) as lat,
                 ST_X(location::geometry) as lon,
                 wind_speed,
                 wind_direction,
-                timestamp from wind_forecasts WHERE ST_Intersects(location, ST_MakeEnvelope(:lon_min,:lat_min,:lon_max,:lat_max, 4326))""")
+                timestamp
+                from wind_forecasts WHERE ST_Intersects(location, ST_MakeEnvelope(:lon_min,:lat_min,:lon_max,:lat_max, 4326))
+               ORDER BY ST_SnapToGrid(location::geometry, :grid, :grid), timestamp DESC
+               """)
     
     result=db.execute(query, {
         'lat_min': lat_min,
         'lat_max':lat_max,
         'lon_min': lon_min ,
         'lon_max': lon_max ,
+        'grid':grid_size
     })
     return [WindPoint(**row._mapping) for row in result]
