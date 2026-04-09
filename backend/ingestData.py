@@ -17,9 +17,9 @@ def fetchWindData():
 
         time_start = f"{today}T00:00:00Z"
         time_end = f"{endDate}T00:00:00Z"
-
+        coordinate_strides=4
         base_url = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ncep_global.nc"
-        url = (f"{base_url}?ugrd10m%5B({time_start}):3:({time_end})%5D%5B(90.0):1:(-90.0)%5D%5B(0.0):1:(359.0)%5D,vgrd10m%5B({time_start}):3:({time_end})%5D%5B(90):1:(-90)%5D%5B(0.0):1:(359.0)%5D")
+        url = (f"{base_url}?ugrd10m%5B({time_start}):3:({time_end})%5D%5B(90.0):{coordinate_strides}:(-90.0)%5D%5B(0.0):{coordinate_strides}:(359.0)%5D,vgrd10m%5B({time_start}):3:({time_end})%5D%5B(90):{coordinate_strides}:(-90)%5D%5B(0.0):{coordinate_strides}:(359.0)%5D")
 
         response = requests.get(url)
         response.raise_for_status()

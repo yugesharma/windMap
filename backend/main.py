@@ -24,3 +24,25 @@ def read_root():
         "database_url_configured": bool(os.getenv("DATABASE_URL"))
     }
 
+@app.get("/wind/bbox", response_model=List[WindPoint])
+def get_wind_by_bbox(
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    db: Session=Depends(get_db)
+):
+
+    query=text("""SELECT id, ST_Y(location::geometry) as lat,
+                ST_X(location::geometry) as lon,
+                wind_speed,
+                wind_direction,
+                timestamp from wind_forecasts WHERE ST_Intersects(location, ST_MakeEnvelope(:lon_min,:lat_min,:lon_max,:lat_max, 4326))""")
+    
+    result=db.execute(query, {
+        'lat_min': lat_min,
+        'lat_max':lat_max,
+        'lon_min': lon_min ,
+        'lon_max': lon_max ,
+    })
+    return [WindPoint(**row._mapping) for row in result]
