@@ -6,6 +6,9 @@ from sqlalchemy import text
 from database import get_db
 from schemas import WindPoint
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func
+from models import WindForecast, DailyWindDate
+
 
 app = FastAPI(title="MapWinds API")
 
@@ -34,14 +37,14 @@ def get_wind_by_bbox(
     db: Session=Depends(get_db)
 ):
 
-    query=text("""SELECT  DISTINCT ON (ST_SnapToGrid(location::geometry, :grid, :grid))
+    query=text("""SELECT  DISTINCT ON (ST_SnapToGrid(location::geometry, :grid, :grid),day)
                id, ST_Y(location::geometry) as lat,
                 ST_X(location::geometry) as lon,
                 wind_speed,
                 wind_direction,
-                timestamp
-                from wind_forecasts WHERE ST_Intersects(location, ST_MakeEnvelope(:lon_min,:lat_min,:lon_max,:lat_max, 4326))
-               ORDER BY ST_SnapToGrid(location::geometry, :grid, :grid), timestamp DESC
+                day AS timestamp
+                from daily_wind_data WHERE ST_Intersects(location, ST_MakeEnvelope(:lon_min,:lat_min,:lon_max,:lat_max, 4326))
+               ORDER BY ST_SnapToGrid(location::geometry, :grid, :grid), day DESC
                """)
     
     result=db.execute(query, {
@@ -52,3 +55,17 @@ def get_wind_by_bbox(
         'grid':grid_size
     })
     return [WindPoint(**row._mapping) for row in result]
+
+@app.get("/wind/date_range")
+async def get_data_range( db: Session=Depends(get_db)):
+    result=db.query(func.min(DailyWindDate.day).label("min_ts"),
+                    func.max(DailyWindDate.day).label("max_ts")).first()
+    if not result or result.min_ts is None:
+        return {"min": 0, "max": 0}
+
+    return {
+        "min": int(result.min_ts.timestamp()), 
+        "max": int(result.max_ts.timestamp()),
+        "count": db.query(DailyWindDate).count()
+    }
+    

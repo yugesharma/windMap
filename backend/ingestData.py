@@ -7,7 +7,7 @@ import numpy as np
 from database import SessionLocal, engine, Base
 from models import WindForecast
 from geoalchemy2.elements import WKTElement
-
+from sqlalchemy import text
 
 def fetchWindData():
     try:
@@ -17,7 +17,7 @@ def fetchWindData():
 
         time_start = f"{today}T00:00:00Z"
         time_end = f"{endDate}T00:00:00Z"
-        coordinate_strides=4
+        coordinate_strides=1
         base_url = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ncep_global.nc"
         url = (f"{base_url}?ugrd10m%5B({time_start}):3:({time_end})%5D%5B(90.0):{coordinate_strides}:(-90.0)%5D%5B(0.0):{coordinate_strides}:(359.0)%5D,vgrd10m%5B({time_start}):3:({time_end})%5D%5B(90):{coordinate_strides}:(-90)%5D%5B(0.0):{coordinate_strides}:(359.0)%5D")
 
@@ -128,15 +128,46 @@ def saveDataToDatabase(data):
     finally:
         db.close()
 
+def dailyWindData():
+    db = SessionLocal()
+    try:
+        db.execute(text("""
+                INSERT INTO daily_wind_data (
+                day, location, wind_speed, wind_direction, source_timestamp)
+                SELECT DISTINCT ON (date_trunc('day', w.timestamp), w.location)
+                date_trunc('day', w.timestamp) AS day,
+                w.location,
+                w.wind_speed,
+                w.wind_direction,
+                w.timestamp as source_timestamp
+                FROM wind_forecasts w
+                ORDER BY date_trunc('day', w.timestamp), w.location, w.timestamp DESC
+                ON CONFLICT(day, location)
+                DO UPDATE SET
+                wind_speed = EXCLUDED.wind_speed,
+                wind_direction = EXCLUDED.wind_direction,
+                source_timestamp = EXCLUDED.source_timestamp
+                WHERE daily_wind_data.source_timestamp < EXCLUDED.source_timestamp;
+                """))
+        db.commit()
+    except Exception as e:
+        print(f"Error saving to database: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+
 def main():
     
     Base.metadata.create_all(bind=engine)
-    data = fetchWindData()
-    if data:
-        processed_data = processWindData(data)
-        if processed_data:
-            print(processed_data)
-            saveDataToDatabase(processed_data)
+    # data = fetchWindData()
+    # if data:
+    #     processed_data = processWindData(data)
+    #     if processed_data:
+    #         print(processed_data)
+    #         saveDataToDatabase(processed_data)
+    dailyWindData()
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import debounce from 'lodash.debounce';
 import apiClient from '../api/client';
@@ -10,8 +10,10 @@ import {WebMercatorViewport} from '@deck.gl/core';
 import {ZoomWidget} from '@deck.gl/widgets';
 import '@deck.gl/widgets/stylesheet.css';
 import { Map } from '@vis.gl/react-maplibre';
+import { DataFilterExtension } from '@deck.gl/extensions';
 
-const MapComponent: React.FC = () => {
+type MapComponentProps={selectedDate:string;};
+const MapComponent: React.FC<MapComponentProps> = ({ selectedDate }) => {
   const [viewState, setViewState] = useState<MapViewState>({
     longitude: -78,
     latitude: 24,
@@ -19,6 +21,10 @@ const MapComponent: React.FC = () => {
     pitch: 0,
     bearing: 0
   });
+
+  const selectedTs = useMemo(() => Date.parse(selectedDate) / 1000, [selectedDate]);
+  const selectedDayStart = Math.floor(selectedTs / 86400) * 86400
+  console.log(selectedDate)
 
   const getSpeedColor = (speed: number): [number, number, number, number] => {
   if (speed <= 8) return [74, 201, 255, 210];
@@ -87,6 +93,11 @@ const getGridSize = (zoom: number): number => {
       sizeMinPixels: 10,
       getAngle: (d) => -d.wind_direction,
       opacity: 0.85,
+      getFilterValue: d => Date.parse(d.timestamp) / 1000, 
+      filterRange: [selectedDayStart, selectedDayStart + 86400], 
+      extensions: [new DataFilterExtension({ filterSize: 1 })], 
+      updateTriggers: {
+      filterRange: [selectedDayStart] }
     })
   ];
 
