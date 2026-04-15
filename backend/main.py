@@ -38,8 +38,8 @@ def get_wind_by_bbox(
 ):
 
     query=text("""SELECT  DISTINCT ON (ST_SnapToGrid(location::geometry, :grid, :grid),day)
-               id, ST_Y(location::geometry) as lat,
-                ST_X(location::geometry) as lon,
+               id, ST_Y(ST_SnapToGrid(location::geometry, :grid, :grid)) as lat,
+                ST_X(ST_SnapToGrid(location::geometry, :grid, :grid)) as lon,
                 wind_speed,
                 wind_direction,
                 day AS timestamp

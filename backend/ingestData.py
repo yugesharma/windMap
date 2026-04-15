@@ -35,7 +35,7 @@ def processWindData(data):
     v=data['vgrd10m']
 
     wind_speed=(np.sqrt(u**2+v**2))*1.94384
-    wind_direction=(np.degrees(np.arctan2(u, v))) % 360
+    wind_direction = (270 - np.degrees(np.arctan2(v, u))) % 360
 
     data['wind_speed'] = wind_speed
     data['wind_direction'] = wind_direction

@@ -35,10 +35,11 @@ const MapComponent: React.FC<MapComponentProps> = ({ selectedDate }) => {
 };
 
 const getGridSize = (zoom: number): number => {
-  if (zoom > 12) return 0.01;  
-  if (zoom > 9)  return 0.05;
-  if (zoom > 7)  return 0.1;
-  if (zoom > 5)  return 0.5;  
+
+  if (zoom > 7)  return 0.01;
+  if (zoom > 4)  return 0.5;
+  if (zoom > 3)  return 0.75;
+  if (zoom > 2)  return 1.5;  
   return 2.0;                 
 };
 
@@ -73,7 +74,7 @@ const getGridSize = (zoom: number): number => {
       }
     }, 500), []);
 
-      const layers = [
+  const layers = useMemo(() => [
     new IconLayer({
       id: 'wind-arrows',
       data: data,
@@ -88,18 +89,18 @@ const getGridSize = (zoom: number): number => {
         mask: true
       }),
       getColor: (d) => getSpeedColor(d.wind_speed),
-      getSize: (d) => Math.max(12, Math.min(30, d.wind_speed * 0.85)),
+      getSize: () => 20,
       sizeUnits: 'pixels',
-      sizeMinPixels: 10,
       getAngle: (d) => -d.wind_direction,
-      opacity: 0.85,
+      opacity: 0.65,
       getFilterValue: d => Date.parse(d.timestamp) / 1000, 
       filterRange: [selectedDayStart, selectedDayStart + 86400], 
       extensions: [new DataFilterExtension({ filterSize: 1 })], 
       updateTriggers: {
-      filterRange: [selectedDayStart] }
+        filterRange: [selectedDayStart]
+      }
     })
-  ];
+  ], [data, selectedDayStart]);
 
   useEffect(() => {
     updateData(viewState);
