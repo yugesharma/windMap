@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 
 type SliderProps = {
   selectedDate: string;
@@ -6,10 +6,20 @@ type SliderProps = {
   onDateChange: (dateIso: string) => void;
 };
 
-const Slider: React.FC<SliderProps> = ({ selectedDate, availableDates, onDateChange }) => {
+function Slider({ selectedDate, availableDates, onDateChange }: SliderProps) {
     const sanitizedDates = useMemo(() => {
         return Array.from(new Set(availableDates)).sort();
     }, [availableDates]);
+
+    const formatUtcLabel = (isoString: string) => {
+        const date = new Date(isoString);
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        const hours = String(date.getUTCHours()).padStart(2, '0');
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes} UTC`;
+    };
 
     if (sanitizedDates.length === 0) {
         return null;
@@ -40,7 +50,7 @@ const Slider: React.FC<SliderProps> = ({ selectedDate, availableDates, onDateCha
         }}
         >
         <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>
-            Forecast Time: {new Date(sanitizedDates[selectedIndex]).toLocaleString()}
+            Forecast Time: {formatUtcLabel(sanitizedDates[selectedIndex])}
         </label>
 
         <input
@@ -54,6 +64,6 @@ const Slider: React.FC<SliderProps> = ({ selectedDate, availableDates, onDateCha
         />
         </div>
     );
-};
+}
 
 export default Slider;

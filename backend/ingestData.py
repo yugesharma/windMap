@@ -161,12 +161,12 @@ def dailyWindData():
 def main():
     
     Base.metadata.create_all(bind=engine)
-    # data = fetchWindData()
-    # if data:
-    #     processed_data = processWindData(data)
-    #     if processed_data:
-    #         print(processed_data)
-    #         saveDataToDatabase(processed_data)
+    data = fetchWindData()
+    if data:
+        processed_data = processWindData(data)
+        if processed_data:
+            print(processed_data)
+            saveDataToDatabase(processed_data)
     dailyWindData()
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import debounce from 'lodash.debounce';
 import apiClient from '../api/client';
@@ -12,8 +12,11 @@ import '@deck.gl/widgets/stylesheet.css';
 import { Map } from '@vis.gl/react-maplibre';
 import { DataFilterExtension } from '@deck.gl/extensions';
 
-type MapComponentProps={selectedDate:string;};
-const MapComponent: React.FC<MapComponentProps> = ({ selectedDate }) => {
+type MapComponentProps = {
+  selectedDate: string;
+};
+
+function MapComponent({ selectedDate }: MapComponentProps) {
   const [viewState, setViewState] = useState<MapViewState>({
     longitude: -78,
     latitude: 24,
@@ -149,6 +152,6 @@ const getGridSize = (zoom: number): number => {
       )}
     </div>
   );
-};
+}
 
 export default MapComponent;
