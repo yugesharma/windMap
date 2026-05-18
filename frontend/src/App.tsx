@@ -3,6 +3,7 @@ import MapComponent from './components/MapComponent'
 import './App.css'
 import Slider from './components/Slider'
 import apiClient from './api/client'
+import WindTable from './components/RealTimeData'
 
 type DateRangeResponse = {
   min: number; 
@@ -25,7 +26,6 @@ function App() {
       }
       
       setAvailableDates(dates);
-      console.log(availableDates)
       if (dates.length>0) {
         setSelectedDate(dates[0]);
       }
@@ -45,6 +45,7 @@ function App() {
         <div className="hero">
           <MapComponent selectedDate={selectedDate}/>
         </div>
+        <WindTable />
         <Slider selectedDate={selectedDate} availableDates= {availableDates} onDateChange= {setSelectedDate} />
       </section>
 

@@ -7,4 +7,13 @@ const apiClient = axios.create({
   },
 });
 
+apiClient.interceptors.response.use(
+  (res)=>res,
+  (err)=>{
+    const status=err?.response?.status
+    const msg=err?.response?.data?.message ?? err.message
+    throw new Error(`HTTP ${status}:${msg}`)
+  }
+)
+
 export default apiClient;

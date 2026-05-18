@@ -8,7 +8,12 @@ from schemas import WindPoint
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from models import WindForecast, DailyWindDate
+from dotenv import load_dotenv
+import requests
 
+load_dotenv()
+oapi_key=os.environ.get("OPEN_WEATHER_API")
+print(oapi_key)
 
 app = FastAPI(title="MapWinds API")
 
@@ -69,3 +74,11 @@ async def get_data_range( db: Session=Depends(get_db)):
         "count": db.query(DailyWindDate).count()
     }
     
+@app.get("/wind/realtime")
+def get_realtime_wind(lat, lon):
+    url=f'https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={oapi_key}'
+    response=requests.get(url)
+    print(response.json())
+    if response.status_code==200:
+        return response.json().get("wind",{})
+    return {"error":f"Data not found. {response.status_code}"}
