@@ -17,7 +17,7 @@ def fetchWindData():
 
         time_start = f"{today}T00:00:00Z"
         time_end = f"{endDate}T00:00:00Z"
-        coordinate_strides=1
+        coordinate_strides=4
         base_url = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ncep_global.nc"
         url = (f"{base_url}?ugrd10m%5B({time_start}):3:({time_end})%5D%5B(90.0):{coordinate_strides}:(-90.0)%5D%5B(0.0):{coordinate_strides}:(359.0)%5D,vgrd10m%5B({time_start}):3:({time_end})%5D%5B(90):{coordinate_strides}:(-90)%5D%5B(0.0):{coordinate_strides}:(359.0)%5D")
 
@@ -76,13 +76,14 @@ def saveDataToDatabase(data):
             
             location = WKTElement(f'POINT({lon} {lat})', srid=4326)
             
-            py_timestamp = timestamp.to_pydatetime()
+            py_timestamp = timestamp.to_pydatetime().astimezone(datetime.timezone.utc)
             
             record = WindForecast(
                 timestamp=py_timestamp,
                 wind_speed=float(row['wind_speed']),
                 wind_direction=float(row['wind_direction']),
-                location=location
+                location=location,
+                created_at=datetime.datetime.now(datetime.timezone.utc)
             )
             records.append(record)
             
@@ -132,23 +133,25 @@ def dailyWindData():
     db = SessionLocal()
     try:
         db.execute(text("""
-                INSERT INTO daily_wind_data (
-                day, location, wind_speed, wind_direction, source_timestamp)
-                SELECT DISTINCT ON (date_trunc('day', w.timestamp), w.location)
-                date_trunc('day', w.timestamp) AS day,
-                w.location,
-                w.wind_speed,
-                w.wind_direction,
-                w.timestamp as source_timestamp
-                FROM wind_forecasts w
-                ORDER BY date_trunc('day', w.timestamp), w.location, w.timestamp DESC
-                ON CONFLICT(day, location)
-                DO UPDATE SET
-                wind_speed = EXCLUDED.wind_speed,
-                wind_direction = EXCLUDED.wind_direction,
-                source_timestamp = EXCLUDED.source_timestamp
-                WHERE daily_wind_data.source_timestamp < EXCLUDED.source_timestamp;
-                """))
+            INSERT INTO daily_wind_data (
+            day, location, wind_speed, wind_direction, source_timestamp, created_at)
+            SELECT DISTINCT ON (date_trunc('day', w.timestamp), w.location)
+            date_trunc('day', w.timestamp) AS day,
+            w.location,
+            w.wind_speed,
+            w.wind_direction,
+            w.timestamp as source_timestamp,
+            timezone('UTC', now()) as created_at
+            FROM wind_forecasts w
+            ORDER BY date_trunc('day', w.timestamp), w.location, w.timestamp DESC
+            ON CONFLICT(day, location)
+            DO UPDATE SET
+            wind_speed = EXCLUDED.wind_speed,
+            wind_direction = EXCLUDED.wind_direction,
+            source_timestamp = EXCLUDED.source_timestamp,
+            created_at = EXCLUDED.created_at
+            WHERE daily_wind_data.source_timestamp < EXCLUDED.source_timestamp;
+            """))
         db.commit()
     except Exception as e:
         print(f"Error saving to database: {e}")
@@ -156,6 +159,34 @@ def dailyWindData():
     finally:
         db.close()
 
+def removeOldData():
+    db = SessionLocal()
+    try:
+        db.execute(text("""
+            DELETE FROM wind_forecasts wf
+            WHERE wf.created_at < (
+                SELECT MAX(wf2.created_at)
+                FROM wind_forecasts wf2
+                WHERE date_trunc('day', wf2.created_at) = date_trunc('day', wf.created_at)
+            );
+        """))
+
+        db.execute(text("""
+            DELETE FROM daily_wind_data d
+            WHERE d.created_at < (
+                SELECT MAX(d2.created_at)
+                FROM daily_wind_data d2
+                WHERE d2.day = d.day
+            );
+        """))
+
+        db.commit()
+        print('deleted older rows, kept latest per day/location')
+    except Exception as e:
+        print(f"Error saving to database: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 def main():
@@ -167,7 +198,8 @@ def main():
         if processed_data:
             print(processed_data)
             saveDataToDatabase(processed_data)
-    dailyWindData()
+            dailyWindData()
+            removeOldData()
 
 if __name__ == "__main__":
     main()

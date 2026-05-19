@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect, useContext } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import debounce from 'lodash.debounce';
 import apiClient from '../api/client';
@@ -11,14 +11,19 @@ import {ZoomWidget} from '@deck.gl/widgets';
 import '@deck.gl/widgets/stylesheet.css';
 import { Map } from '@vis.gl/react-maplibre';
 import { DataFilterExtension } from '@deck.gl/extensions';
-import { useRealTimeWindData, WindTable } from './RealTimeData';
+import WindProvider, {WindContext} from './RealTimeData';
+
 
 type MapComponentProps = {
   selectedDate: string;
 };
 
 function MapComponent({ selectedDate }: MapComponentProps) {
-  const { getWindData } = useRealTimeWindData();
+  const context =useContext(WindContext);
+  if (!context) {
+        throw new Error('Context empty');
+    }
+  const { path, setPath,getWindData } = context;
 
   const [viewState, setViewState] = useState<MapViewState>({
     longitude: -78,
@@ -50,7 +55,6 @@ function MapComponent({ selectedDate }: MapComponentProps) {
 
   const [data, setData] = useState<any[]>([]);
   const [hoverCoords, setHoverCoords] = useState<{lon: number, lat: number} | null>(null);
-  const [path, setPath]=useState<any[]>([]);
 
   const updateData = useCallback(
     debounce(async (vs: MapViewState) => {
@@ -98,7 +102,7 @@ function MapComponent({ selectedDate }: MapComponentProps) {
       sizeUnits: 'pixels',
       getAngle: (d) => -d.wind_direction,
       opacity: 0.65,
-      getFilterValue: (d: any) => Date.parse(d.timestamp) / 1000, 
+      getFilterValue: d => Date.parse(d.timestamp) / 1000, 
       filterRange: [selectedDayStart, selectedDayStart + 86400], 
       extensions: [new DataFilterExtension({ filterSize: 1 })], 
       updateTriggers: {
@@ -119,7 +123,7 @@ function MapComponent({ selectedDate }: MapComponentProps) {
       id:'IconLayer',
       data:path,
       getColor: [255,172,141],
-      getIcon: () => 'marker',
+      getIcon: d => 'marker',
       getPosition: d => d,
       getSize: 40,
       iconAtlas: 'https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-atlas.png',
@@ -150,45 +154,41 @@ function MapComponent({ selectedDate }: MapComponentProps) {
     }
   }
 
+
   const widgets = [new ZoomWidget({ placement: 'top-right' })];  
 
   return (
-    <>
-      <div className="map-shell" style={{ height: '500px', width: '100%', position: 'relative' }}>
-        <DeckGL
-          initialViewState={viewState}
-          onViewStateChange={({ viewState: nextViewState }: ViewStateChangeParameters) => setViewState(nextViewState as MapViewState)}
-          controller={true}
-          onHover={onHover}
-          onClick={handleClick}
-          layers={layers}
-          widgets={widgets}
-        >
-          <Map mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
-  />
-        </DeckGL>
-        {hoverCoords && (
-          <div style={{
-            position: 'absolute',
-            bottom: '10px',
-            left: '10px',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            color: 'white',
-            padding: '5px 10px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            pointerEvents: 'none', 
-            zIndex: 10
-          }}>
-            LAT: {hoverCoords.lat.toFixed(4)} | LON: {hoverCoords.lon.toFixed(4)}
-          </div>
-        )}
-      </div>
-      <div style={{ marginTop: '20px', padding: '20px', overflowX: 'auto' }}>
-        <WindTable />
-      </div>
-    </>
+  <div className="map-shell" style={{ height: '500px', width: '100%', position: 'relative' }}>
+      <DeckGL
+        initialViewState={viewState}
+        onViewStateChange={({ viewState: nextViewState }: ViewStateChangeParameters) => setViewState(nextViewState as MapViewState)}
+        controller={true}
+        onHover={onHover}
+        onClick={handleClick}
+        layers={layers}
+        widgets={widgets}
+      >
+        <Map mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+ />
+      </DeckGL>
+      {hoverCoords && (
+        <div style={{
+          position: 'absolute',
+          bottom: '10px',
+          left: '10px',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          color: 'white',
+          padding: '5px 10px',
+          borderRadius: '4px',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+          pointerEvents: 'none', 
+          zIndex: 10
+        }}>
+          LAT: {hoverCoords.lat.toFixed(4)} | LON: {hoverCoords.lon.toFixed(4)}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -36,20 +36,8 @@ function Slider({ selectedDate, availableDates, onDateChange }: SliderProps) {
     };
 
     return (
-        <div
-        style={{
-            position: 'absolute',
-            bottom: '40px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '320px',
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            padding: '10px 12px',
-            borderRadius: '8px',
-            zIndex: 100
-        }}
-        >
-        <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>
+        <div className="slider-shell">
+        <label className="slider-label">
             Forecast Time: {formatUtcLabel(sanitizedDates[selectedIndex])}
         </label>
 
@@ -60,7 +48,7 @@ function Slider({ selectedDate, availableDates, onDateChange }: SliderProps) {
             step={1}
             value={selectedIndex}
             onChange={handleSliderChange}
-            style={{ width: '100%', height: '20px' }}
+            className="slider-input"
         />
         </div>
     );
