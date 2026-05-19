@@ -11,5 +11,4 @@ requests
 numpy
 pytz
 scipy
-requests
-dotenv
+pydantic
